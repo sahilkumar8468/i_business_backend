@@ -5,6 +5,9 @@ const cors = require("cors");
 const { db } = require("./firebase");
 const businessRoutes = require("./routes/business");
 const adminRoutes = require("./routes/admin");
+const cashRoutes = require("./routes/cash");
+const assetsRoutes = require("./routes/assets");
+const expensesRoutes = require("./routes/expenses");
 
 const app = express();
 
@@ -18,6 +21,9 @@ app.get("/", (req, res) => {
 
 app.use("/admin", adminRoutes);
 app.use("/businesses", businessRoutes);
+app.use("/cash", cashRoutes);
+app.use("/assets", assetsRoutes);
+app.use("/expenses", expensesRoutes);
 
 
 // Old Users route (updated for new db export)
