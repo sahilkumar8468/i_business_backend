@@ -14,6 +14,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const usersRoutes = require("./routes/users");
+
 // Routes
 app.get("/", (req, res) => {
   res.send("i business API Running");
@@ -24,18 +26,7 @@ app.use("/businesses", businessRoutes);
 app.use("/cash", cashRoutes);
 app.use("/assets", assetsRoutes);
 app.use("/expenses", expensesRoutes);
-
-
-// Old Users route (updated for new db export)
-app.post("/users", async (req, res) => {
-  try {
-    const data = req.body;
-    const docRef = await db.collection("users").add(data);
-    res.status(201).json({ id: docRef.id, message: "User added successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+app.use("/users", usersRoutes);
 
 const PORT = process.env.PORT || 5000;
 

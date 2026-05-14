@@ -16,6 +16,14 @@ const checkAuth = async (req, res, next) => {
       // Check if this Firebase user is the Super Admin by email
       if (req.user.email === process.env.SUPER_ADMIN_USER) {
         req.user.isSuperAdmin = true;
+        req.user.globalRole = "super_admin";
+      } else {
+        const userDoc = await db.collection("users").doc(req.user.uid).get();
+        if (userDoc.exists) {
+          req.user.globalRole = userDoc.data().role;
+        } else {
+          req.user.globalRole = "admin"; // Default legacy owners
+        }
       }
       return next();
     } catch (firebaseErr) {
@@ -59,10 +67,12 @@ const checkRole = (allowedRoles) => {
         .get();
 
       if (!memberDoc.exists) {
+        console.warn(`[AUTH] Access denied: User ${userId} is not a member of business ${businessId}`);
         return res.status(403).json({ error: "You are not a member of this business" });
       }
 
       const { role } = memberDoc.data();
+      console.log(`[AUTH] User ${userId} has role ${role} in business ${businessId}`);
       if (!allowedRoles.includes(role)) {
         return res.status(403).json({ error: `Requires one of these roles: ${allowedRoles.join(", ")}` });
       }
