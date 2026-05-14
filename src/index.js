@@ -11,7 +11,12 @@ const expensesRoutes = require("./routes/expenses");
 
 const app = express();
 
-app.use(cors());
+// Enable CORS for production (Vercel/Render)
+app.use(cors({
+  origin: "*", // You can restrict this to your Vercel URL later for better security
+  methods: ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 
 const usersRoutes = require("./routes/users");
