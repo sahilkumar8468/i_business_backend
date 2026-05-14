@@ -1,5 +1,4 @@
 require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
-require("fs").appendFileSync("debug.log", `Server starting at ${new Date().toISOString()}\n`);
 
 const express = require("express");
 const cors = require("cors");
@@ -36,6 +35,10 @@ app.use("/users", usersRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;
