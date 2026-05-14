@@ -1,4 +1,5 @@
-require("dotenv").config({ path: __dirname + "/.env" });
+require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
+require("fs").appendFileSync("debug.log", `Server starting at ${new Date().toISOString()}\n`);
 
 const express = require("express");
 const cors = require("cors");
