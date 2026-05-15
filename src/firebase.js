@@ -16,13 +16,15 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 }
 
 if (!serviceAccount) {
-  console.warn("No service account configuration found. Firebase may not initialize correctly.");
+  console.error("❌ CRITICAL ERROR: No Firebase Service Account found!");
+  console.error("Please ensure 'FIREBASE_SERVICE_ACCOUNT' is set in your Vercel/Railway Environment Variables.");
+} else {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID
+  });
+  console.log("✅ Firebase initialized successfully using " + (process.env.FIREBASE_SERVICE_ACCOUNT ? "Environment Variable" : "Local File"));
 }
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID
-});
 
 
 const db = admin.firestore();
