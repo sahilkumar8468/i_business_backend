@@ -9,7 +9,7 @@ router.get("/me", checkAuth, async (req, res) => {
   res.json({
     uid: req.user.uid,
     email: req.user.email,
-    globalRole: req.user.globalRole,
+    globalRole: req.user.globalRole || req.user.role,
     isSuperAdmin: req.user.isSuperAdmin || false
   });
 });
