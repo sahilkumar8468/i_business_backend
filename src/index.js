@@ -8,6 +8,12 @@ const adminRoutes = require("./routes/admin");
 const cashRoutes = require("./routes/cash");
 const assetsRoutes = require("./routes/assets");
 const expensesRoutes = require("./routes/expenses");
+const purchasesRoutes = require("./routes/purchases");
+const banksRoutes = require("./routes/banks");
+const salesRoutes = require("./routes/sales");
+const inventoryRoutes = require("./routes/inventory");
+const banksGlobalRoutes = require("./routes/banks_global");
+const notificationsRoutes = require("./routes/notifications");
 
 const app = express();
 
@@ -32,6 +38,12 @@ app.use("/cash", cashRoutes);
 app.use("/assets", assetsRoutes);
 app.use("/expenses", expensesRoutes);
 app.use("/users", usersRoutes);
+app.use("/purchases", purchasesRoutes);
+app.use("/banks", banksRoutes);
+app.use("/banks/global", banksGlobalRoutes);
+app.use("/sales", salesRoutes);
+app.use("/inventory", inventoryRoutes);
+app.use("/notifications", notificationsRoutes);
 
 const PORT = process.env.PORT || 5000;
 

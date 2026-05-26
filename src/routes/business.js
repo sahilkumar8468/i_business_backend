@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { db, admin } = require("../firebase");
 const { checkAuth, checkRole } = require("../middleware/auth");
+const { notifyAdmin } = require("../utils/notifyAdmin");
 
 // 11. Join a business using ID
 router.post("/join", checkAuth, async (req, res) => {
@@ -90,6 +91,7 @@ router.post("/", checkAuth, async (req, res) => {
     await businessRef.set({
       name,
       ownerId: userId,
+      businessType: req.body.businessType || "generic",
       config: config || {}, // Dynamic fields definition
       partners: partnersList,
       memberIds: partnersList.map(p => p.userId),
@@ -235,12 +237,28 @@ router.post("/:businessId/entries", checkAuth, checkRole(["owner", "admin", "edi
 
   try {
     const entryRef = db.collection("businesses").doc(businessId).collection("entries").doc();
+    const actorName = req.user.displayName || req.user.email || "Employee";
     await entryRef.set({
       ...entryData,
       createdBy: req.user.uid,
-      createdByName: req.user.displayName || req.user.email || "Employee",
+      createdByName: actorName,
       createdAt: new Date()
     });
+
+    // Notify parent admin
+    db.collection("businesses").doc(businessId).get().then(bizDoc => {
+      const businessName = bizDoc.exists ? bizDoc.data().name : "Business";
+      notifyAdmin({
+        actorUid: req.user.uid,
+        actorName,
+        type: "entry_added",
+        message: `added a new transaction entry in "${businessName}"`,
+        businessId,
+        businessName,
+        refId: entryRef.id
+      });
+    }).catch(err => console.error("Notification trigger error:", err));
+
     res.status(201).json({ id: entryRef.id, message: "Entry added successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -411,7 +429,7 @@ router.post("/:businessId/partners", checkAuth, checkRole(["owner", "admin"]), a
 // 12. Update Business
 router.patch("/:businessId", checkAuth, checkRole(["owner", "admin"]), async (req, res) => {
   const { businessId } = req.params;
-  const { name, startDate, endDate } = req.body;
+  const { name, startDate, endDate, businessType } = req.body;
 
   try {
     const updateData = {
@@ -421,6 +439,7 @@ router.patch("/:businessId", checkAuth, checkRole(["owner", "admin"]), async (re
     };
 
     if (name) updateData.name = name;
+    if (businessType) updateData.businessType = businessType;
     if (startDate) updateData.startDate = new Date(startDate);
     if (endDate) updateData.endDate = endDate ? new Date(endDate) : null;
 
@@ -449,13 +468,29 @@ router.patch("/:businessId/entries/:entryId", checkAuth, checkRole(["owner", "ad
   const updateData = { ...req.body };
 
   try {
+    const actorName = req.user.displayName || req.user.email || "System User";
     updateData.updatedAt = new Date();
     updateData.updatedBy = req.user.uid;
-    updateData.updatedByName = req.user.displayName || req.user.email || "System User";
+    updateData.updatedByName = actorName;
 
     if (updateData.date) updateData.date = new Date(updateData.date);
 
     await db.collection("businesses").doc(businessId).collection("entries").doc(entryId).update(updateData);
+
+    // Notify parent admin
+    db.collection("businesses").doc(businessId).get().then(bizDoc => {
+      const businessName = bizDoc.exists ? bizDoc.data().name : "Business";
+      notifyAdmin({
+        actorUid: req.user.uid,
+        actorName,
+        type: "entry_updated",
+        message: `updated a transaction entry in "${businessName}"`,
+        businessId,
+        businessName,
+        refId: entryId
+      });
+    }).catch(err => console.error("Notification trigger error:", err));
+
     res.json({ message: "Entry updated successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -467,8 +502,178 @@ router.delete("/:businessId/entries/:entryId", checkAuth, checkRole(["owner", "a
   const { businessId, entryId } = req.params;
 
   try {
+    const actorName = req.user.displayName || req.user.email || "System User";
     await db.collection("businesses").doc(businessId).collection("entries").doc(entryId).delete();
+
+    // Notify parent admin
+    db.collection("businesses").doc(businessId).get().then(bizDoc => {
+      const businessName = bizDoc.exists ? bizDoc.data().name : "Business";
+      notifyAdmin({
+        actorUid: req.user.uid,
+        actorName,
+        type: "entry_deleted",
+        message: `deleted a transaction entry from "${businessName}"`,
+        businessId,
+        businessName,
+        refId: entryId
+      });
+    }).catch(err => console.error("Notification trigger error:", err));
+
     res.json({ message: "Entry deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 16. Create Installment Contract
+router.post("/:businessId/installments", checkAuth, checkRole(["owner", "admin", "editor"]), async (req, res) => {
+  const { businessId } = req.params;
+  const {
+    customerName,
+    customerPhone,
+    customerPic,
+    customerCnicPic,
+    itemModel,
+    itemVin,
+    totalAmount,
+    depositAmount,
+    durationMonths,
+    startDate,
+    inventoryId
+  } = req.body;
+
+  if (!customerName || !totalAmount || !durationMonths) {
+    return res.status(400).json({ error: "customerName, totalAmount, and durationMonths are required" });
+  }
+
+  try {
+    const total = Number(totalAmount);
+    const deposit = Number(depositAmount) || 0;
+    const remaining = total - deposit;
+    const duration = Number(durationMonths);
+    const instAmt = Math.round(remaining / duration);
+    const sDate = startDate ? new Date(startDate) : new Date();
+
+    const installmentsList = [];
+    for (let i = 1; i <= duration; i++) {
+      const dDate = new Date(sDate);
+      dDate.setMonth(dDate.getMonth() + i);
+      installmentsList.push({
+        month: i,
+        dueDate: dDate,
+        amount: instAmt,
+        isPaid: false,
+        paidAt: null
+      });
+    }
+
+    const instRef = db.collection("businesses").doc(businessId).collection("installments").doc();
+    const instData = {
+      customerName,
+      customerPhone: customerPhone || "",
+      customerPic: customerPic || null,
+      customerCnicPic: customerCnicPic || null,
+      itemModel: itemModel || "",
+      itemVin: itemVin || "",
+      totalAmount: total,
+      depositAmount: deposit,
+      remainingAmount: remaining,
+      durationMonths: duration,
+      startDate: sDate,
+      endDate: installmentsList[installmentsList.length - 1].dueDate,
+      installmentsList,
+      status: "active",
+      inventoryId: inventoryId || null,
+      createdAt: new Date(),
+      createdBy: req.user.uid
+    };
+
+    await instRef.set(instData);
+
+    // If an inventory item was associated, update its status
+    if (inventoryId) {
+      const invRef = db.collection("businesses").doc(businessId).collection("inventory").doc(inventoryId);
+      await invRef.update({
+        status: "sold",
+        soldAt: new Date(),
+        soldPrice: total,
+        soldTo: customerName,
+        installmentId: instRef.id
+      });
+    }
+
+    res.status(201).json({ id: instRef.id, message: "Installment plan created successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 17. List Installment Contracts
+router.get("/:businessId/installments", checkAuth, checkRole(["owner", "admin", "viewer", "employee"]), async (req, res) => {
+  const { businessId } = req.params;
+  try {
+    const snap = await db.collection("businesses").doc(businessId).collection("installments").orderBy("createdAt", "desc").get();
+    const list = snap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: formatDate(data.createdAt),
+        startDate: formatDate(data.startDate),
+        endDate: formatDate(data.endDate),
+        installmentsList: (data.installmentsList || []).map(inst => ({
+          ...inst,
+          dueDate: formatDate(inst.dueDate),
+          paidAt: formatDate(inst.paidAt)
+        }))
+      };
+    });
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 18. Pay an Installment Month
+router.patch("/:businessId/installments/:installmentId", checkAuth, checkRole(["owner", "admin", "editor"]), async (req, res) => {
+  const { businessId, installmentId } = req.params;
+  const { month } = req.body; // e.g. 1, 2, 3...
+
+  try {
+    const ref = db.collection("businesses").doc(businessId).collection("installments").doc(installmentId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Installment plan not found" });
+
+    const data = doc.data();
+    let updatedList = (data.installmentsList || []).map(inst => {
+      if (inst.month === Number(month)) {
+        return { ...inst, isPaid: true, paidAt: new Date() };
+      }
+      return inst;
+    });
+
+    const paidTotal = updatedList.filter(i => i.isPaid).reduce((sum, i) => sum + i.amount, 0);
+    const remaining = Math.max(0, data.totalAmount - data.depositAmount - paidTotal);
+    const allPaid = updatedList.every(i => i.isPaid);
+
+    await ref.update({
+      installmentsList: updatedList,
+      remainingAmount: remaining,
+      status: allPaid ? "completed" : "active"
+    });
+
+    res.json({ message: `Installment for month ${month} recorded` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 19. Delete Installment Contract
+router.delete("/:businessId/installments/:installmentId", checkAuth, checkRole(["owner", "admin"]), async (req, res) => {
+  const { businessId, installmentId } = req.params;
+  try {
+    await db.collection("businesses").doc(businessId).collection("installments").doc(installmentId).delete();
+    res.json({ message: "Installment plan deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -6,12 +6,27 @@ const { checkAuth } = require("../middleware/auth");
 const jwt = require("jsonwebtoken");
 
 router.get("/me", checkAuth, async (req, res) => {
-  res.json({
-    uid: req.user.uid,
-    email: req.user.email,
-    globalRole: req.user.globalRole,
-    isSuperAdmin: req.user.isSuperAdmin || false
-  });
+  try {
+    let displayName = req.user.name || null;
+    let username = null;
+    
+    const userDoc = await db.collection("users").doc(req.user.uid).get();
+    if (userDoc.exists) {
+      displayName = userDoc.data().displayName || displayName;
+      username = userDoc.data().username || null;
+    }
+    
+    res.json({
+      uid: req.user.uid,
+      email: req.user.email,
+      displayName: displayName || req.user.email?.split("@")[0] || "User",
+      username: username,
+      globalRole: req.user.globalRole,
+      isSuperAdmin: req.user.isSuperAdmin || false
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.post("/login", async (req, res) => {
