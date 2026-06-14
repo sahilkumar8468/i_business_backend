@@ -9,7 +9,6 @@ router.get("/", checkAuth, async (req, res) => {
     // 1. Fetch persistent database notifications
     const snap = await db.collection("notifications")
       .where("targetAdminId", "==", req.user.uid)
-      .orderBy("createdAt", "desc")
       .limit(50)
       .get();
 

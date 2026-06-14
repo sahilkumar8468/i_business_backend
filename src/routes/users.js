@@ -73,22 +73,28 @@ router.post("/login", async (req, res) => {
   }
 });
 
+const { parsePagination } = require("../utils/pagination");
+
 router.get("/", checkAuth, async (req, res) => {
   try {
     if (req.user.globalRole === "employee") {
       return res.status(403).json({ error: "Employees cannot view users." });
     }
+    const { page, limit, offset } = parsePagination(req.query);
 
-    let snapshot;
-    if (req.user.isSuperAdmin) {
-      snapshot = await db.collection("users").get();
-    } else {
-      // Only fetch users created by this admin
-      snapshot = await db.collection("users").where("createdBy", "==", req.user.uid).get();
+    let baseQuery = db.collection("users");
+    if (!req.user.isSuperAdmin) {
+      baseQuery = baseQuery.where("createdBy", "==", req.user.uid);
     }
-    
-    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.json(users);
+
+    // Get total count (snapshot) and paginated results
+    const totalSnapshot = await baseQuery.get();
+    const total = totalSnapshot.size;
+
+    const pagedSnapshot = await baseQuery.offset(offset).limit(limit).get();
+    const users = pagedSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    res.json({ data: users, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

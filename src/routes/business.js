@@ -6,19 +6,36 @@ const { notifyAdmin } = require("../utils/notifyAdmin");
 
 // 11. Join a business using ID
 router.post("/join", checkAuth, async (req, res) => {
-  const { businessId } = req.body;
+  const { businessId, businessName } = req.body;
   const userId = req.user.uid;
 
-  if (!businessId) {
-    return res.status(400).json({ error: "Business ID is required to join" });
+  if (!businessId && !businessName) {
+    return res.status(400).json({ error: "Business name or ID is required to join" });
   }
 
   try {
-    const businessRef = db.collection("businesses").doc(businessId);
-    const businessDoc = await businessRef.get();
+    let businessRef;
+    let businessDoc;
+
+    if (businessId) {
+      businessRef = db.collection("businesses").doc(businessId);
+      businessDoc = await businessRef.get();
+    } else {
+      const querySnapshot = await db.collection("businesses")
+        .where("name", "==", businessName.trim())
+        .limit(1)
+        .get();
+
+      if (querySnapshot.empty) {
+        return res.status(404).json({ error: "Business not found. Please check the name." });
+      }
+
+      businessDoc = querySnapshot.docs[0];
+      businessRef = businessDoc.ref;
+    }
 
     if (!businessDoc.exists) {
-      return res.status(404).json({ error: "Business not found. Please check the ID." });
+      return res.status(404).json({ error: "Business not found. Please check the name or ID." });
     }
 
     const business = businessDoc.data();
@@ -531,10 +548,19 @@ router.post("/:businessId/installments", checkAuth, checkRole(["owner", "admin",
   const {
     customerName,
     customerPhone,
+    customerCnic,
     customerPic,
     customerCnicPic,
     itemModel,
     itemVin,
+    chassisNo,
+    engineNo,
+    registrationNo,
+    horsePower,
+    sellRelativeName,
+    purchaserAddress,
+    sellerAddress,
+    showroomName,
     totalAmount,
     depositAmount,
     durationMonths,
@@ -571,10 +597,19 @@ router.post("/:businessId/installments", checkAuth, checkRole(["owner", "admin",
     const instData = {
       customerName,
       customerPhone: customerPhone || "",
+      customerCnic: customerCnic || "",
       customerPic: customerPic || null,
       customerCnicPic: customerCnicPic || null,
       itemModel: itemModel || "",
       itemVin: itemVin || "",
+      chassisNo: chassisNo || itemVin || "",
+      engineNo: engineNo || "",
+      registrationNo: registrationNo || "",
+      horsePower: horsePower || "",
+      sellRelativeName: sellRelativeName || "",
+      purchaserAddress: purchaserAddress || "",
+      sellerAddress: sellerAddress || "",
+      showroomName: showroomName || "",
       totalAmount: total,
       depositAmount: deposit,
       remainingAmount: remaining,

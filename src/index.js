@@ -14,6 +14,7 @@ const salesRoutes = require("./routes/sales");
 const inventoryRoutes = require("./routes/inventory");
 const banksGlobalRoutes = require("./routes/banks_global");
 const notificationsRoutes = require("./routes/notifications");
+const bikeBusinessRoutes = require("./routes/bikeBusiness");
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use("/banks/global", banksGlobalRoutes);
 app.use("/sales", salesRoutes);
 app.use("/inventory", inventoryRoutes);
 app.use("/notifications", notificationsRoutes);
+app.use("/bike-business", bikeBusinessRoutes);
 
 const PORT = process.env.PORT || 5000;
 
