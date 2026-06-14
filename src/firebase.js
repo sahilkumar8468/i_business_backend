@@ -19,10 +19,28 @@ if (!serviceAccount) {
   console.warn("No service account configuration found. Firebase may not initialize correctly.");
 }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID
-});
+let initOptions = {};
+
+if (serviceAccount && typeof serviceAccount === "object" && Object.keys(serviceAccount).length) {
+  initOptions.credential = admin.credential.cert(serviceAccount);
+  initOptions.projectId = serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID;
+} else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  // If a path to a service account JSON is provided via env var, use application default
+  console.info("Using application default credentials from GOOGLE_APPLICATION_CREDENTIALS.");
+  initOptions.credential = admin.credential.applicationDefault();
+  if (process.env.FIREBASE_PROJECT_ID) initOptions.projectId = process.env.FIREBASE_PROJECT_ID;
+} else {
+  // No explicit credentials found — initialize without cert. On GCP this will pick up ADC.
+  console.warn("Initializing Firebase without explicit credentials. Relying on default credentials if available.");
+  if (process.env.FIREBASE_PROJECT_ID) initOptions.projectId = process.env.FIREBASE_PROJECT_ID;
+}
+
+try {
+  admin.initializeApp(initOptions);
+} catch (err) {
+  console.error("Failed to initialize Firebase Admin SDK:", err);
+  throw err;
+}
 
 const db = admin.firestore();
 const auth = admin.auth();
